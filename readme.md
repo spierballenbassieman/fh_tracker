@@ -2,6 +2,8 @@ De fh_tracker repository is een aanpassing op https://github.com/theAIGuysCode/y
 
 Gebaseerd op paper: https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9739737
 
+ByteTrack is eigenlijk beter dan DeepSort: https://arxiv.org/pdf/2204.06918.pdf#cite.Nillius2006Multi
+
 # Field hockey player tracker
 
 Hello and welcome to the code for my field hockey player tracker. 
