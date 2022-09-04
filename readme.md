@@ -1,5 +1,7 @@
 De fh_tracker repository is een aanpassing op https://github.com/theAIGuysCode/yolov4-deepsort.
 
+Gebaseerd op paper: https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9739737
+
 # Field hockey player tracker
 
 Hello and welcome to the code for my field hockey player tracker. 
