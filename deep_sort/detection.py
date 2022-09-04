@@ -32,12 +32,12 @@ class Detection(object):
         self.tlwh = np.asarray(tlwh, dtype=np.float)
         self.confidence = float(confidence)
         self.class_name = class_name
-        self.color = color
         self.feature = np.asarray(feature, dtype=np.float32)
+        self.color = color
 
     def get_class(self):
         return self.class_name
-
+    
     def get_color(self):
         return self.color
 
