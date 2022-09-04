@@ -1,3 +1,5 @@
+De fh_tracker repository is een aanpassing op https://github.com/theAIGuysCode/yolov4-deepsort.
+
 # Field hockey player tracker
 
 Hello and welcome to the code for my field hockey player tracker. 
