@@ -3,7 +3,6 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import time
 import tensorflow as tf
-# making sure tensorflow is using the GPU
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
 if len(physical_devices) > 0:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -13,41 +12,39 @@ import core.utils as utils
 from core.yolov4 import filter_boxes
 from tensorflow.python.saved_model import tag_constants
 from core.config import cfg
-from deep_sort.color_detect import find_color
 from PIL import Image
+from deep_sort.color_detect import find_color
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
-
 # deep sort imports
 from deep_sort import preprocessing, nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from tools import generate_detections as gdet
-
 flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt')
-flags.DEFINE_string('weights', './checkpoints/yolov4-416', 'path to weights file')
-flags.DEFINE_string('field_image', './data/FHFIELD.jpg', 'path to image of field')
+flags.DEFINE_string('weights', './checkpoints/yolov4-416',
+                    'path to weights file')
 flags.DEFINE_integer('size', 416, 'resize images to')
 flags.DEFINE_boolean('tiny', False, 'yolo or yolo-tiny')
 flags.DEFINE_string('model', 'yolov4', 'yolov3 or yolov4')
 flags.DEFINE_string('video', './data/video/test.mp4', 'path to input video or set to 0 for webcam')
 flags.DEFINE_string('output', None, 'path to output video')
-flags.DEFINE_string('output_2', None, 'path to output top down view video')
-flags.DEFINE_string('output_format', 'MP4V', 'codec used in VideoWriter when saving video to file')
+flags.DEFINE_string('output_format', 'XVID', 'codec used in VideoWriter when saving video to file')
 flags.DEFINE_float('iou', 0.45, 'iou threshold')
 flags.DEFINE_float('score', 0.50, 'score threshold')
+flags.DEFINE_boolean('dont_show', False, 'dont show video output')
+flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
+flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
+
+flags.DEFINE_list('jersey_colors', ['white','blue','yellow'], 'list of jersey colors Team1, Team 2, optional: other')
+flags.DEFINE_float('color_threshold', 0.05, 'color detection min percentage to assign jersey color to player')
 flags.DEFINE_float('cosine', 0.4, 'max cosine distance')
 flags.DEFINE_float('nms_overlap', 1.0, 'NMS max overlap')
 flags.DEFINE_integer('max_age', 60, 'deep sort max age parameter')
 flags.DEFINE_integer('n_init', 3, 'deep sort nr init parameter')
-flags.DEFINE_boolean('dont_show', True, 'dont show video output')
-flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
-flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
-flags.DEFINE_list('jersey_colors', ['white', 'blue'], 'list of jersey colors Team1, Team 2, optional: other')
-flags.DEFINE_float('color_threshold', 0.0, 'color detection min percentage to assign jersey color to player')
 
 def main(_argv):
     # Definition of the parameters
@@ -102,39 +99,18 @@ def main(_argv):
         codec = cv2.VideoWriter_fourcc(*FLAGS.output_format)
         out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
 
-    # get video ready to save top down view if flag is set
-    if FLAGS.output_2:
-        img = cv2.imread(FLAGS.field_image)
-        width_2 = img.shape[1]
-        height_2 = img.shape[0]
-        fps_2 = int(vid.get(cv2.CAP_PROP_FPS))
-        codec_2 = cv2.VideoWriter_fourcc(*FLAGS.output_format)
-        out_2 = cv2.VideoWriter(FLAGS.output_2, codec_2, fps_2, (width_2, height_2))
-
-        # Calculate homography matrix for perspective shift to top down view
-        # Homography points created by running homography_coordinates.py, adjust for camera / view in video
-        src_points = (np.float32([(10, 1854), (326, 1956), (852, 2065), (1602, 2127), (2244, 2105), (2999, 1999),
-                                  (3531, 1855), (3831, 1740), (1905, 1456), (1897, 1039), (396, 881), (1887, 765),
-                                  (3399, 779), (868, 546), (1876, 457), (2906, 483), (1135, 393), (1881, 331),
-                                  (2632, 345)]).reshape(-1, 1, 2))
-        tgt_points = (np.float32([(154, 428), (153, 546), (153, 674), (153, 802), (150, 898), (150, 1028), (153, 1155),
-                                  (153, 1267), (316, 851), (528, 856), (740, 144), (742, 857), (742, 1557), (1334, 144),
-                                  (1332, 848), (1334, 1559), (1920, 145), (1924, 854), (1924, 1559)]).reshape(-1, 1, 2))
-        H_mat = cv2.findHomography(src_points, tgt_points, method=0)[0]
-
+    frame_num = 0
     # while video is running
     while True:
         return_value, frame = vid.read()
         if return_value:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             image = Image.fromarray(frame)
-            # reset field image as basis for new frame in birds eye view
-            if FLAGS.output_2:
-                img = cv2.imread(FLAGS.field_image)
         else:
             print('Video has ended or failed, try a different video format!')
             break
-    
+        frame_num +=1
+        print('Frame #: ', frame_num)
         frame_size = frame.shape[:2]
         image_data = cv2.resize(frame, (input_size, input_size))
         image_data = image_data / 255.
@@ -183,16 +159,22 @@ def main(_argv):
         original_h, original_w, _ = frame.shape
         bboxes = utils.format_boxes(bboxes, original_h, original_w)
 
+        # print(bboxes[0])
+        # print()
+        # print(bboxes[2])
+        # print()
+
         # store all predictions in one parameter for simplicity when calling functions
         pred_bbox = [bboxes, scores, classes, num_objects]
 
         # read in all class names from config
         class_names = utils.read_class_names(cfg.YOLO.CLASSES)
 
-        # (custom) to allow all classes in .names file, uncomment this line
-        # allowed_classes = list(class_names.values())
+        # by default allow all classes in .names file
+        #allowed_classes = list(class_names.values())
         
-        # Tracking only people
+        # custom allowed classes (uncomment line below to customize tracker for only people)
+        #allowed_classes = ['person', 'sports ball']
         allowed_classes = ['person']
 
         # loop through objects and use class index to get class name, allow only classes in allowed_classes list
@@ -201,8 +183,20 @@ def main(_argv):
         for i in range(num_objects):
             class_indx = int(classes[i])
             class_name = class_names[class_indx]
-            if class_name not in allowed_classes:
+            # Zie comment achter volgende regel!
+            #print(bboxes[i][1] - bboxes[i][3])  
+            #print(bboxes[i][0] - bboxes[i][2]) 
+            #print()
+            if bboxes[i][2] < 0.0:
+                print("JASDAS")
+                print()
+                print()
+            #if (class_name not in allowed_classes) or (bboxes[i][3] < 60.0) or (bboxes[i][1] < 5.0) or (-12 < (bboxes[i][1] - bboxes[i][3]) < 12.0) or (((bboxes[i][1] - bboxes[i][3]) > 250.0) or (bboxes[i][1] - bboxes[i][3]) < -250.0): # or-statements added by Bas, last or-statement to remove weird very large bboxes, the one before to remove really small bboxes. Otherwise the small bboxes implode and turn into really big ones on random locations.
+#            if (class_name not in allowed_classes) or (-12 < (bboxes[i][1] - bboxes[i][3]) < 12.0) or (((bboxes[i][1] - bboxes[i][3]) > 250.0) or (bboxes[i][1] - bboxes[i][3]) < -250.0): # or-statements added by Bas, last or-statement to remove weird very large bboxes, the one before to remove really small bboxes. Otherwise the small bboxes implode and turn into really big ones on random locations.
+            if (class_name not in allowed_classes) or (bboxes[i][1] < 60.0) or ((bboxes[i][0] + bboxes[i][3]) < 5.0) or (bboxes[i][3] < 8.0) or (bboxes[i][3] > 250.0): # or-statements added by Bas, last or-statement to remove weird very large bboxes, the one before to remove really small bboxes. Otherwise the small bboxes implode and turn into really big ones on random locations.
+
                 deleted_indx.append(i)
+
             else:
                 names.append(class_name)
         names = np.array(names)
@@ -210,10 +204,20 @@ def main(_argv):
         if FLAGS.count:
             cv2.putText(frame, "Objects being tracked: {}".format(count), (5, 35), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (0, 255, 0), 2)
             print("Objects being tracked: {}".format(count))
+
         # delete detections that are not in allowed_classes
         bboxes = np.delete(bboxes, deleted_indx, axis=0)
         scores = np.delete(scores, deleted_indx, axis=0)
 
+        
+        # encode yolo detections and feed to tracker
+        #features = encoder(frame, bboxes)
+        #detections = [Detection(bbox, score, class_name, feature) for bbox, score, class_name, feature in zip(bboxes, scores, names, features)]
+
+        #initialize color map
+        #cmap = plt.get_cmap('tab20b')
+        #colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)]
+        
         # detect jersey color
         patches = [gdet.extract_image_patch(frame, box, [box[3], box[2]]) for box in bboxes]
         colors = [find_color(patch, FLAGS.jersey_colors, threshold = FLAGS.color_threshold)
@@ -221,6 +225,7 @@ def main(_argv):
 
         # encode yolo detections and feed to tracker
         features = encoder(frame, bboxes)
+        
         if jersey_colors:
             detections = [Detection(bbox, score, class_name, feature, color) for bbox, score, class_name, feature, color
                           in zip(bboxes, scores, names, features, colors)]
@@ -228,50 +233,90 @@ def main(_argv):
             detections = [Detection(bbox, score, class_name, feature) for bbox, score, class_name, feature
                           in zip(bboxes, scores, names, features)]
 
+            
         # run non-maxima supression
         boxs = np.array([d.tlwh for d in detections])
         scores = np.array([d.confidence for d in detections])
         classes = np.array([d.class_name for d in detections])
         indices = preprocessing.non_max_suppression(boxs, classes, nms_max_overlap, scores)
-        detections = [detections[i] for i in indices]       
-
+        detections = [detections[i] for i in indices]
+  
         # Call the tracker
         tracker.predict()
-        tracker.update(detections)
+        tracker.update(detections) # HIERO DE GRIJZE DETECTION
 
         # update tracks
         for track in tracker.tracks:
-            if not track.is_confirmed() or track.time_since_update > 1:
+            
+            # you can of course delete these first two if-statements to improve FPS
+            if not track.is_confirmed():
+                ###
+                bbox = track.to_tlbr()
+                color = [255, 255, 100]
+                class_name = "tentative"
+
+                cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
+                cv2.rectangle(frame, (int(bbox[0]), int(bbox[1] - 30)), (int(bbox[0]) + (len(class_name) + len(str(track.track_id))) * 17, int(bbox[1])), color,-1)
+                cv2.putText(frame, class_name + "-" + str(track.track_id), (int(bbox[0]), int(bbox[1] - 10)), 0, 0.75,(255, 255, 255), 2)
+                ###
                 continue 
+
+            elif track.time_since_update > 1 and not track.is_deleted():
+                ###
+                bbox = track.to_tlbr()
+                color = [105, 105, 105]
+                class_name = "pred. track"
+
+                cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
+                cv2.rectangle(frame, (int(bbox[0]), int(bbox[1] - 30)), (int(bbox[0]) + (len(class_name) + len(str(track.track_id))) * 17, int(bbox[1])), color,-1)
+                cv2.putText(frame, class_name + "-" + str(track.track_id), (int(bbox[0]), int(bbox[1] - 10)), 0, 0.75,(255, 255, 255), 2)
+                ###
+                continue 
+
+            # TESTJE
+            # elif (track.time_since_update == 1) and not track.is_deleted():
+            #     bbox = track.to_tlbr()
+            #     color = [35, 35, 35]
+            #     class_name = "TEST track"
+
+            #     cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
+            #     cv2.rectangle(frame, (int(bbox[0]), int(bbox[1] - 30)), (int(bbox[0]) + (len(class_name) + len(str(track.track_id))) * 17, int(bbox[1])), color,-1)
+            #     cv2.putText(frame, class_name + "-" + str(track.track_id), (int(bbox[0]), int(bbox[1] - 10)), 0, 0.75,(255, 255, 255), 2)
+            #     ###
+            #     continue 
+
+
             bbox = track.to_tlbr()
             class_name = track.get_class()
             jersey_color = track.get_color()
+            
             if jersey_color == jersey_colors[0]:
-                color = [255, 0, 0]
-                team_name = 'Team 1'
-            elif jersey_color == jersey_colors[1]:
                 color = [0, 0, 255]
+                team_name = 'Team 1'
+
+            elif jersey_color == jersey_colors[1]:
+
+                color = [255, 0, 0]
                 team_name = 'Team 2'
+
+            elif len(jersey_colors) > 2 and jersey_color == jersey_colors[2]:
+                color = [255, 165, 0]
+                team_name = 'referee'
+
             else:
-                color = [105, 105, 105]
+                color = [25, 25, 25]
                 team_name = 'Other'
-
-            # draw bbox on screen of original video
+            
+        # draw bbox on screen
+            #color = colors[int(track.track_id) % len(colors)]
+            #color = [i * 255 for i in color]
             cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
-            cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(team_name)+len(str(track.track_id)))*17, int(bbox[1])), color, -1)
-            cv2.putText(frame, team_name + "-" + str(track.track_id),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, (255,255,255),2)
-
-            # draw mark on top down view, use coordinates from lower middle of bbox and transform with homography matrix
-            x, y = (bbox[0] + bbox[2]) / 2, bbox[3]
-            pts = cv2.perspectiveTransform(np.array([[[x, y]]], dtype="float32"), H_mat)
-            x_new, y_new = pts[0][0]
-            cv2.circle(img, (int(x_new), int(y_new)), 15, color[::-1], -1)
-
-
+            cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(track.track_id)))*17, int(bbox[1])), color, -1)
+            cv2.putText(frame, class_name + "-" + str(track.track_id),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, (255,255,255),2)
+            
         # if enable info flag then print details about each track
             if FLAGS.info:
-                print("Tracker ID: {}, Team: {},  BBox Coords (xmin, ymin, xmax, ymax): {}"
-                      .format(str(track.track_id), team_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
+                print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(track.track_id), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
 
         # calculate frames per second of running detections
         fps = 1.0 / (time.time() - start_time)
@@ -282,11 +327,9 @@ def main(_argv):
         if not FLAGS.dont_show:
             cv2.imshow("Output Video", result)
         
-        # if output flag is set, save video file(s)
+        # if output flag is set, save video file
         if FLAGS.output:
             out.write(result)
-        if FLAGS.output_2:
-            out_2.write(img)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
     cv2.destroyAllWindows()
 
