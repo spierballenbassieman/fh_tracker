@@ -9,6 +9,17 @@ classes to work with it. The main function can be found in color_detect.py
 * I created the homography_coordinates.py script to do camera calibration and added it to the main folder.
 The rest of the transformation happens inside the object_tracker.py script
 
+# Video input used
+De lange filmpjes waren te groot om te uploaden. In de map data zitten wel twee ingekorte fragmenten.
+
+https://pspagnolo.jimdofree.com/download/ of direct: https://www.dropbox.com/s/3zhms9iv4gy3k81/Sequences.zip?dl=1
+
+Ik denk dat ID-3 en ID-4 de beste filmpjes zijn om te testen qua occlusions etc.
+
+
+# Command used:
+python3 object_tracker.py --video /home/basheuver/yolov4-deepsort/data/video/n1.mp4 --output /home/basheuver/yolov4-deepsort/outputs/outpu3ca.avi --model yolov4 --dont_show --jersey_colors 'white','blue','orange' --max_age 95 --nms_overlap 0.7 --n_init 14 --iou 0.8 --cosine 0.2
+
 ## Running the tracker
 
 I recommend using Google Colab to run the tracker, since it gives acces to a GPU for free.
