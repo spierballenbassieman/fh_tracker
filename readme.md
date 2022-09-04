@@ -4,6 +4,8 @@ Gebaseerd op paper: https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9739737
 
 ByteTrack is eigenlijk beter dan DeepSort: https://arxiv.org/pdf/2204.06918.pdf#cite.Nillius2006Multi
 
+Nice background information DeepSort: https://programming.vip/docs/deepsort-multi-target-tracking-algorithm.html
+
 # Field hockey player tracker
 
 Hello and welcome to the code for my field hockey player tracker. 
