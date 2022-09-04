@@ -3,6 +3,8 @@ De fh_tracker repository is een aanpassing op https://github.com/theAIGuysCode/y
 Gebaseerd op paper: https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9739737
 
 ByteTrack is eigenlijk beter dan DeepSort: https://arxiv.org/pdf/2204.06918.pdf#cite.Nillius2006Multi
+En StrongSort (Make DeepSort Great Again, 2022) ook. Ik vermoed dat de aanpassing van DeepSort naar StrongSort makkelijk is, aangezien de files erg op elkaar lijken:
+https://github.com/mikel-brostrom/Yolov5_StrongSORT_OSNet/tree/master/strong_sort/sort
 
 Nice background information DeepSort: https://programming.vip/docs/deepsort-multi-target-tracking-algorithm.html
 
